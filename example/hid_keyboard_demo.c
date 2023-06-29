@@ -198,7 +198,22 @@ static bool                   send_active;
 static bd_addr_t device_addr;
 static const char * device_addr_string = "BC:EC:5D:E6:15:03";
 #endif
+char str[20];
+// Read device from File
+static char * get_target_device(){
+	FILE* ptr;
+	ptr = fopen("test.txt", "a+");
 
+	if (NULL == ptr) {
+		printf("file can't be opened \n");
+	}
+	printf("content of this file are \n");
+	while (fgets(str, 19, ptr) != NULL) {
+		printf("%s", str);
+	}
+	fclose(ptr);
+	return &str;
+}
 static enum {
     APP_BOOTING,
     APP_NOT_CONNECTED,
@@ -290,6 +305,8 @@ static void stdin_process(char character){
             break;
         case APP_NOT_CONNECTED:
             printf("Connecting to %s...\n", bd_addr_to_str(device_addr));
+            device_addr_string = get_target_device();
+            sscanf_bd_addr(device_addr_string, device_addr);
             hid_device_connect(device_addr, &hid_cid);
             break;
         default:
