@@ -52,8 +52,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include <inttypes.h>
-
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
 #include "btstack.h"
+#include <pthread.h>
 
 #ifdef HAVE_BTSTACK_STDIN
 #include "btstack_stdin.h"
@@ -300,7 +304,9 @@ static void stdin_process(char character){
             // ignore
             break;
         case APP_CONNECTED:
+        	printf("Sending Char: %c\n", character);
             // add char to send buffer
+        	// mkfifo, named pipe read from fifo
             queue_character(character);
             break;
         case APP_NOT_CONNECTED:
@@ -373,9 +379,9 @@ static void packet_handler(uint8_t packet_type, uint16_t channel, uint8_t * pack
                             }
                             app_state = APP_CONNECTED;
                             hid_cid = hid_subevent_connection_opened_get_hid_cid(packet);
-#ifdef HAVE_BTSTACK_STDIN                        
+#ifdef HAVE_BTSTACK_STDIN
                             printf("HID Connected, please start typing...\n");
-#else                        
+#else
                             printf("HID Connected, sending demo text...\n");
                             demo_text_timer_handler(NULL);
 #endif
@@ -414,7 +420,29 @@ static void packet_handler(uint8_t packet_type, uint16_t channel, uint8_t * pack
             break;
     }
 }
+void *do_smth_periodically(void *data)
+{
+  int fd1;
+  char * myfifo = "/tmp/myfifo";
+  mkfifo(myfifo, 0666);
+  char str1[80], str2[80];
+  int interval = *(int *)data;
+  for (;;) {
+      // First open in read only and read
+      fd1 = open(myfifo,O_RDONLY);
+      read(fd1, str1, 80);
 
+      // Print the read string and close
+      printf("User1: %s\n", str1);
+      close(fd1);
+      stdin_process(*str1);
+
+//        // Now open in write mode and write
+//        // string taken from user.
+
+    usleep(interval);
+  }
+}
 /* @section Main Application Setup
  *
  * @text Listing MainConfiguration shows main application code. 
@@ -428,6 +456,15 @@ int btstack_main(int argc, const char * argv[]);
 int btstack_main(int argc, const char * argv[]){
     (void)argc;
     (void)argv;
+
+    // Named Pipe Initialization
+    int fd1;
+	// FIFO file path
+	char * myfifo = "/tmp/hidkey";
+	// Creating the named file(FIFO)
+	// mkfifo(<pathname>,<permission>)
+	mkfifo(myfifo, 0666);
+
 
     // allow to get found by inquiry
     gap_discoverable_control(1);
@@ -494,6 +531,9 @@ int btstack_main(int argc, const char * argv[]){
 #ifdef HAVE_BTSTACK_STDIN
     sscanf_bd_addr(device_addr_string, device_addr);
     btstack_stdin_setup(stdin_process);
+    pthread_t thread;
+    int interval = 5000;
+    pthread_create(&thread, NULL, do_smth_periodically, &interval);
 #endif
 
     btstack_ring_buffer_init(&send_buffer, send_buffer_storage, sizeof(send_buffer_storage));
